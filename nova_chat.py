@@ -18,8 +18,14 @@ import os
 import shutil
 import subprocess
 import sys
+import time
+from datetime import datetime
 
 NOVA_CLI_AUTH_ENV = os.path.expanduser("~/.nova-cli/auth.env")
+
+
+def clock():
+    return datetime.now().strftime("%H:%M:%S")
 
 
 def load_env_file(path, override=False):
@@ -151,19 +157,21 @@ def main():
         debug=debug,
     )
 
+    started = time.monotonic()
     try:
         greeting = chat.start()
     except NovaCliError as exc:
         sys.exit(f"failed to start conversation: {exc}")
+    elapsed = time.monotonic() - started
 
     print(f"assistant {assistant_id} v{version_id} | conversation {chat.conversation_id}")
     print("/new restarts, /quit ends the conversation and exits\n")
     if greeting:
-        print(f"nova> {greeting}\n")
+        print(f"[{clock()} {elapsed:.2f}s] nova> {greeting}\n")
 
     while True:
         try:
-            message = input("you> ").strip()
+            message = input(f"[{clock()}] you> ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
@@ -171,20 +179,19 @@ def main():
             continue
         if message in ("/quit", "/exit"):
             break
-        if message == "/new":
-            print(f"nova> {chat.start()}\n")
-            continue
 
+        started = time.monotonic()
         try:
-            print(f"nova> {chat.send(message)}\n")
+            reply = chat.start() if message == "/new" else chat.send(message)
+            print(f"[{clock()} {time.monotonic() - started:.2f}s] nova> {reply}\n")
         except KeyboardInterrupt:
             try:
                 chat.cancel()
             except NovaCliError:
                 pass
-            print("\n[cancelled]\n")
+            print(f"\n[{clock()} {time.monotonic() - started:.2f}s] cancelled\n")
         except NovaCliError as exc:
-            print(f"[error] {exc}\n", file=sys.stderr)
+            print(f"[{clock()} {time.monotonic() - started:.2f}s] error: {exc}\n", file=sys.stderr)
 
     try:
         chat.end()
